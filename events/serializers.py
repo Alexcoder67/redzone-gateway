@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Event
+from django.utils import timezone
 
 class EventSerializer(serializers.ModelSerializer):
     days_until_event = serializers.SerializerMethodField()
@@ -12,3 +13,8 @@ class EventSerializer(serializers.ModelSerializer):
         from django.utils import timezone
         delta = obj.date - timezone.now()
         return delta.days
+
+    def validate_date(self, value ):
+        if value < timezone.now():
+            raise serializers.ValidationError("Please choose a valid date for this activity.")
+        return value
