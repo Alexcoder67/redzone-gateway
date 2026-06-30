@@ -7,8 +7,9 @@ class EventSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'title', 'description', 'location', 'date', 'created_at', 'days_until_event']
-
+        fields = ['id', 'title', 'description', 'location', 'date', 'created_at', 'days_until_event', 'created_by']
+        read_only_fields = ['created_by']
+        
     def get_days_until_event(self, obj):
         from django.utils import timezone
         delta = obj.date - timezone.now()
