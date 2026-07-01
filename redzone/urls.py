@@ -1,11 +1,12 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from events.views import EventViewSet
+from events.views import EventViewSet, RSVPViewSet, WaitlistViewSet
 
 router = DefaultRouter()
 router.register(r'events', EventViewSet)
-
+router.register(r'rsvps', RSVPViewSet)
+router.register(r'waitlist', WaitlistViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
