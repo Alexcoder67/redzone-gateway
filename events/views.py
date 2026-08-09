@@ -7,7 +7,7 @@ from .models import Event, RSVP, Waitlist
 from .serializers import EventSerializer, RSVPSerializer, WaitlistSerializer
 from rest_framework import filters
 from .permissions import IsOwnerOrReadOnly
-from .tasks import send_rsvp_confirmation, send_waitlist_confirmation, send_waitlist_promoted
+from .tasks import send_rsvp_confirmation, send_waitlist_confirmation, send_waitlist_promoted, send_event_cancelled, send_event_cancelled_host
 
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.all().order_by('date')
@@ -21,6 +21,28 @@ class EventViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
 
         serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        event = self.get_object()
+        event.is_cancelled = True
+        event.save()
+
+        for rsvp in event.rsvps.all():
+            send_event_cancelled.delay(rsvp.user.email, event.title)
+
+        for entry in event.waitlist.all():
+            send_event_cancelled.delay(entry.user.email, event.title)
+
+        send_event_cancelled_host.delay(event.created_by.email, event.title)
+
+        return Response({'status': 'Event cancelled', 'is_cancelled': event.is_cancelled})
+    
+    @action(detail=False, methods=['get'])
+    def my_events(self, request):
+        events = Event.objects.filter(created_by=request.user).order_by('date')
+        serializer = self.get_serializer(events, many=True)
+        return Response(serializer.data)   
 
 class RSVPViewSet(viewsets.ModelViewSet):
     queryset = RSVP.objects.all()
@@ -33,7 +55,23 @@ class RSVPViewSet(viewsets.ModelViewSet):
             rsvp.user.email,
             rsvp.event.title
         )
-        
+
+    def perform_destroy(self, instance):
+        event = instance.event
+        instance.delete()
+
+        next_in_line = Waitlist.objects.filter(event=event).order_by('created_at').first()
+        if next_in_line:
+            RSVP.objects.create(user=next_in_line.user, event=event)
+            send_waitlist_promoted.delay(next_in_line.user.email, event.title)
+            next_in_line.delete() 
+
+    @action(detail=False, methods=['get'])
+    def my_rsvps(self, request):
+        rsvps = RSVP.objects.filter(user=request.user).order_by('created_at')
+        serializer = self.get_serializer(rsvps, many=True)
+        return Response(serializer.data)     
+
         
 
 class WaitlistViewSet(viewsets.ModelViewSet):
@@ -62,4 +100,11 @@ class WaitlistViewSet(viewsets.ModelViewSet):
                 return Response ({'position': position})
 
         return Response({'message': 'You are not on the waitlist for this event.'})
+
+    @action(detail=False, methods=['get'])
+    def my_waitlist(self, request):
+        entries = Waitlist.objects.filter(user=request.user).order_by('created_at')
+        serializer = self.get_serializer(entries, many=True)
+        return Response(serializer.data)
+    
 

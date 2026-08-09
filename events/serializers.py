@@ -8,7 +8,7 @@ class EventSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'title', 'description', 'location', 'date', 'created_at', 'days_until_event', 'created_by', 'rsvp_count']
+        fields = ['id', 'title', 'description', 'location', 'date', 'created_at', 'days_until_event', 'created_by', 'rsvp_count', 'is_cancelled', 'max_attendees']
         read_only_fields = ['created_by']
 
     def get_days_until_event(self, obj):
@@ -37,6 +37,9 @@ class RSVPSerializer(serializers.ModelSerializer):
         event = data.get('event')
         if RSVP.objects.filter(user=user, event=event).exists():
             raise serializers.ValidationError("You have already RSVP'd to this event.")
+        if event.max_attendees is not None:
+            if event.rsvps.count() >= event.max_attendees:
+                raise serializers.ValidationError("This event is full. Would you like to join the Waitlist instead?")
         return data
 
 class WaitlistSerializer(serializers.ModelSerializer):
